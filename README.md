@@ -1,4 +1,4 @@
-![logo](./Immersive Aircraft x Immersive Engineering/logo.png)
+![logo](./logo.png)
 
 让沉浸飞机使用沉浸工程的燃料。带有"iaie:fuel"标签的液体可以作为燃料，默认包括IE生物柴油，装了沉浸原油也可以使用柴油、含硫柴油和煤油。
 使用方法：给沉浸金属桶内加入燃油，然后放到飞机的燃料槽位里面。
