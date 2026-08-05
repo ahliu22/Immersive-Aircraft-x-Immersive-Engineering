@@ -42,13 +42,6 @@ public interface Fuel {
         if (fluid.is(FluidTags.create(new ResourceLocation("iaie", "fuel")))) {
             return true;
         }
-        ResourceLocation fluidId = ForgeRegistries.FLUIDS.getKey(fluid);
-        if (fluidId != null) {
-            String path = fluidId.getPath();
-            if (path.contains("diesel") || path.contains("fuel") || path.contains("oil")) {
-                return true;
-            }
-        }
         return false;
     }
 
@@ -132,7 +125,9 @@ public interface Fuel {
 
     /**
      * 燃烧率：0.1mb/tick
+     * @deprecated Use IaieConfig.BIODIESEL_FUEL_TICK.get() instead
      */
+    @Deprecated
     int BIODIESEL_BURN_RATE = 20;
 
     /**
