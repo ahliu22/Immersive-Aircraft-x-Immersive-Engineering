@@ -1,115 +1,70 @@
 package net.ahliu22.iaie;
 
+import blusunrize.immersiveengineering.common.register.IEDataComponents;
 import immersive_aircraft.entity.EngineVehicle;
 import immersive_aircraft.entity.inventory.VehicleInventoryDescription;
 import immersive_aircraft.entity.inventory.slots.SlotDescription;
-import immersive_aircraft.util.Utils;
-import net.minecraft.nbt.CompoundTag;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.material.Fluid;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.SimpleFluidContent;
 
 import java.util.List;
 
 public interface Fuel {
 
-    ThreadLocal<Boolean> BYPASS_FUEL_TIME = ThreadLocal.withInitial(() -> false);
-
-    static int getOriginalFuelTime(ItemStack stack) {
-        BYPASS_FUEL_TIME.set(true);
-        try {
-            return Utils.getFuelTime(stack);
-        } finally {
-            BYPASS_FUEL_TIME.remove();
-        }
-    }
-    /**
-     * 检查是否为IE金属桶
-     */
     static boolean isIEBarrel(ItemStack stack) {
-        return stack.is(ItemTags.create(new ResourceLocation("iaie", "fuel_tanks")));
+        return stack.is(ItemTags.create(ResourceLocation.parse("iaie:fuel_tanks")));
     }
 
-    /**
-     * 检查流体是否为IE钻头燃料
-     */
     static boolean isBiodiesel(Fluid fluid) {
         if (fluid == null) return false;
-        if (fluid.is(FluidTags.create(new ResourceLocation("iaie", "fuel")))) {
+        if (fluid.is(FluidTags.create(ResourceLocation.parse("iaie:fuel")))) {
             return true;
-        }
-        ResourceLocation fluidId = ForgeRegistries.FLUIDS.getKey(fluid);
-        if (fluidId != null) {
-            String path = fluidId.getPath();
-            if (path.contains("diesel") || path.contains("fuel") || path.contains("oil")) {
-                return true;
-            }
         }
         return false;
     }
 
-    /**
-     * 从IE金属桶中获取流体
-     */
     static FluidStack getFluidFromIEBarrel(ItemStack barrelStack) {
-        if (barrelStack.isEmpty()) {
-            return FluidStack.EMPTY;
-        }
-
-        CompoundTag tag = barrelStack.getTag();
-        if (tag == null) {
-            return FluidStack.EMPTY;
-        }
-
-        if (!tag.contains("tank")) {
-            return FluidStack.EMPTY;
-        }
-
-        CompoundTag tankTag = tag.getCompound("tank");
-        if (tankTag.isEmpty()) {
-            return FluidStack.EMPTY;
-        }
-
-        int amount = tankTag.getInt("Amount");
-        String fluidName = tankTag.getString("FluidName");
-
-        if (amount <= 0 || fluidName == null || fluidName.isEmpty()) {
-            return FluidStack.EMPTY;
-        }
-
-        Fluid fluid = ForgeRegistries.FLUIDS.getValue(new ResourceLocation(fluidName));
-        if (fluid == null) {
-            return FluidStack.EMPTY;
-        }
-
-        return new FluidStack(fluid, amount);
+        if (barrelStack.isEmpty()) return FluidStack.EMPTY;
+        SimpleFluidContent content = barrelStack.get(IEDataComponents.GENERIC_FLUID);
+        if (content == null) return FluidStack.EMPTY;
+        return content.copy();
     }
 
-    /**
-     * 检查桶内是否有油
-     */
+    static boolean drainFromIEBarrel(ItemStack barrelStack, int amount) {
+        SimpleFluidContent content = barrelStack.get(IEDataComponents.GENERIC_FLUID);
+        if (content == null) return false;
+        FluidStack fluid = content.copy();
+        if (fluid.isEmpty() || fluid.getAmount() < amount) return false;
+
+        int newAmount = fluid.getAmount() - amount;
+        if (newAmount <= 0) {
+            barrelStack.remove(IEDataComponents.GENERIC_FLUID);
+        } else {
+            barrelStack.set(IEDataComponents.GENERIC_FLUID,
+                    SimpleFluidContent.copyOf(fluid.copyWithAmount(newAmount)));
+        }
+        return true;
+    }
+
     default boolean hasBiodieselInBarrel(ItemStack barrelStack) {
         FluidStack fluid = getFluidFromIEBarrel(barrelStack);
-        if (fluid.isEmpty()) {
-            return false;
-        }
+        if (fluid.isEmpty()) return false;
         return isBiodiesel(fluid.getFluid()) && fluid.getAmount() > 0;
     }
 
-    /**
-     * 检查是否有桶油不足
-     */
     default boolean isAnyBarrelLowOnBiodiesel(EngineVehicle vehicle) {
         List<SlotDescription> fuelSlots = vehicle.getInventoryDescription().getSlots(VehicleInventoryDescription.BOILER);
-
         for (SlotDescription slot : fuelSlots) {
             ItemStack stack = vehicle.getInventory().getItem(slot.index());
             if (isIEBarrel(stack)) {
-                if (isBarrelLowOnBiodiesel(stack)) {
+                FluidStack fluid = getFluidFromIEBarrel(stack);
+                if (fluid.isEmpty() || !isBiodiesel(fluid.getFluid()) || fluid.getAmount() <= 100) {
                     return true;
                 }
             }
@@ -117,40 +72,4 @@ public interface Fuel {
         return false;
     }
 
-    /**
-     * 检查单个桶是否生物柴油不足
-     */
-    private boolean isBarrelLowOnBiodiesel(ItemStack barrelStack) {
-        FluidStack fluid = Fuel.getFluidFromIEBarrel(barrelStack);
-        if (fluid.isEmpty() || !isBiodiesel(fluid.getFluid())) {
-            return true;
-        }
-
-        // 低燃料阈值：剩余燃料低于100mb（1000tick的消耗量）
-        return fluid.getAmount() <= 100;
-    }
-
-    /**
-     * 燃烧率：0.1mb/tick
-     */
-    int BIODIESEL_BURN_RATE = 20;
-
-    /**
-     * 更新桶内流体
-     */
-    static void updateIEBarrelFluid(ItemStack barrelStack, FluidStack fluidStack) {
-        CompoundTag tag = barrelStack.getOrCreateTag();
-
-        if (fluidStack == null) {
-            tag.remove("tank");
-        } else {
-            CompoundTag tankTag = new CompoundTag();
-            tankTag.putInt("Amount", fluidStack.getAmount());
-            ResourceLocation fluidId = ForgeRegistries.FLUIDS.getKey(fluidStack.getFluid());
-            if (fluidId != null) {
-                tankTag.putString("FluidName", fluidId.toString());
-            }
-            tag.put("tank", tankTag);
-        }
-    }
 }
