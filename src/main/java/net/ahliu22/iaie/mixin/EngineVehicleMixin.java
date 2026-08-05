@@ -89,7 +89,7 @@ public class EngineVehicleMixin implements Fuel {
             else fluidStack.shrink(1);
             Fuel.updateIEBarrelFluid(barrelStack, fluidStack);
 
-            setFuelValue(fuelIndex, currentFuel + Fuel.BIODIESEL_BURN_RATE);
+            setFuelValue(fuelIndex, currentFuel + IaieConfig.BIODIESEL_FUEL_TICK.get());
         }
     }
 
